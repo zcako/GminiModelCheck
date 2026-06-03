@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Gemini Relay Audit</title>
+  <link rel="stylesheet" href="/static/styles.css">
+</head>
+<body>
+  <main class="app-shell">
+    <section class="control-panel">
+      <header class="topbar">
+        <div>
+          <h1>Gemini Relay Audit</h1>
+          <p id="statusText">等待检测</p>
+        </div>
+        <div id="statusPill" class="status-pill idle">Idle</div>
+      </header>
+
+      <form id="auditForm" class="form-grid">
+        <label>
+          <span>Base URL</span>
+          <input name="base" type="url" placeholder="https://example.com" required>
+        </label>
+        <label>
+          <span>审计名称</span>
+          <input name="name" type="text" value="relay-audit" required>
+        </label>
+        <label class="wide">
+          <span>API Keys</span>
+          <textarea name="keys" rows="5" placeholder="primary=sk-xxx&#10;secondary=sk-yyy" required></textarea>
+        </label>
+        <label>
+          <span>主模型</span>
+          <input name="model" type="text" value="gemini-3.1-pro-preview">
+        </label>
+        <label>
+          <span>Sig 模型</span>
+          <input name="sig_model" type="text" value="gemini-3-flash-preview">
+        </label>
+
+        <details class="advanced wide">
+          <summary>高级参数</summary>
+          <div class="advanced-grid">
+            <label>
+              <span>字段采样 N</span>
+              <input name="n_samples" type="number" min="1" max="100" value="20">
+            </label>
+            <label>
+              <span>自 sig N</span>
+              <input name="n_self_sig" type="number" min="1" max="50" value="8">
+            </label>
+            <label>
+              <span>超时秒数</span>
+              <input name="timeout" type="number" min="10" max="600" value="120">
+            </label>
+            <label class="check">
+              <input name="skip_active" type="checkbox">
+              <span>跳过主动探针</span>
+            </label>
+            <label class="check">
+              <input name="skip_tier4" type="checkbox">
+              <span>跳过 Tier 4</span>
+            </label>
+            <label class="check">
+              <input name="skip_cross_sig" type="checkbox">
+              <span>跳过跨 key sig</span>
+            </label>
+          </div>
+        </details>
+
+        <div class="actions wide">
+          <button id="startButton" type="submit">开始检测</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="run-panel">
+      <div class="timeline-wrap">
+        <h2>检测过程</h2>
+        <ol id="timeline" class="timeline"></ol>
+      </div>
+      <div class="terminal-wrap">
+        <div class="terminal-head">
+          <h2>命令行输出</h2>
+          <button id="clearLogButton" type="button">清空</button>
+        </div>
+        <pre id="logOutput" class="terminal"></pre>
+      </div>
+    </section>
+
+    <section id="reportPanel" class="report-panel hidden">
+      <div class="report-head">
+        <div>
+          <h2>可视化报告</h2>
+          <p id="reportMeta"></p>
+        </div>
+        <div id="artifactLinks" class="artifact-links"></div>
+      </div>
+      <div id="summaryGrid" class="summary-grid"></div>
+      <div id="detailGrid" class="detail-grid"></div>
+      <details class="markdown-report">
+        <summary>Markdown 报告</summary>
+        <pre id="markdownOutput"></pre>
+      </details>
+    </section>
+  </main>
+  <script src="/static/app.js"></script>
+</body>
+</html>

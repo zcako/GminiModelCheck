@@ -30,6 +30,46 @@ python audit.py \
     --n-samples 5
 ```
 
+## Web 可视化
+
+本项目也提供一个零依赖 Web 控制台,用于填写 URL / key / 模型并实时查看检测过程。
+
+```bash
+# 本地启动
+python -m web.server --host 127.0.0.1 --port 8080
+```
+
+打开:
+
+```text
+http://127.0.0.1:8080
+```
+
+Web 端会调用同一个 `audit.py` CLI,实时展示命令行输出,检测结束后读取
+`verdict.json` 和 `report.md` 生成可视化报告。
+
+### Docker 部署
+
+```bash
+docker build -t gemini-relay-audit .
+docker run --rm -p 8080:8080 -v "${PWD}/reports:/app/reports" gemini-relay-audit
+```
+
+可选鉴权:
+
+```bash
+docker run --rm -p 8080:8080 \
+  -e WEB_AUTH_TOKEN="change-me" \
+  -v "${PWD}/reports:/app/reports" \
+  gemini-relay-audit
+```
+
+启用鉴权后访问:
+
+```text
+http://127.0.0.1:8080/?token=change-me
+```
+
 ## 输出
 
 ```
