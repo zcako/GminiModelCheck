@@ -48,11 +48,45 @@ http://127.0.0.1:8080
 Web 端会调用同一个 `audit.py` CLI,实时展示命令行输出,检测结束后读取
 `verdict.json` 和 `report.md` 生成可视化报告。
 
+### Web 功能
+
+- 可视化填写 `base URL`、单个或多个 API key、主探测模型、sig 模型
+- 支持配置 `n_samples`、`n_self_sig`、`timeout` 和跳过探针开关
+- 像命令行一样实时展示检测输出
+- 按探针阶段展示检测进度
+- 检测结束后展示每个 key 的最终判定、置信度、主要证据和注意事项
+- 可视化展示字段采样分布、HTTP 头信号、Tier 4 结果和跨 key sig 矩阵
+- 保留 `verdict.json`、`report.md` 和 `raw/` 原始抓包产物
+
+### Web key 输入格式
+
+单 key:
+
+```text
+sk-xxxxx
+```
+
+多 key:
+
+```text
+key1=sk-aaaa
+key2=sk-bbbb
+key3=sk-cccc
+```
+
+不写名称时会自动命名为 `key1`、`key2`。
+
 ### Docker 部署
 
 ```bash
 docker build -t gemini-relay-audit .
 docker run --rm -p 8080:8080 -v "${PWD}/reports:/app/reports" gemini-relay-audit
+```
+
+PowerShell 示例:
+
+```powershell
+docker run --rm -p 8080:8080 -v "${PWD}\reports:/app/reports" gemini-relay-audit
 ```
 
 可选鉴权:
@@ -69,6 +103,18 @@ docker run --rm -p 8080:8080 \
 ```text
 http://127.0.0.1:8080/?token=change-me
 ```
+
+### Web 环境变量
+
+| 变量 | 默认值 | 说明 |
+|---|---|---|
+| `WEB_HOST` | `0.0.0.0` | Web 服务监听地址 |
+| `WEB_PORT` | `8080` | Web 服务监听端口 |
+| `WEB_REPORT_ROOT` | `reports` | Web/CLI 共享的报告输出目录 |
+| `WEB_AUTH_TOKEN` | 空 | 设置后需要通过 `?token=` 或 Bearer token 访问 API |
+| `WEB_QUIET` | 空 | 设为 `1` 时减少 Web 服务访问日志 |
+
+生产或公网环境建议设置 `WEB_AUTH_TOKEN`,并将 `reports/` 挂载为持久化 volume。
 
 ## 输出
 
@@ -172,12 +218,17 @@ A: 增加 `--timeout 180` 或检查网络连接。
 ```
 gemini-relay-audit/
 ├── audit.py              # 主入口(CLI + 编排)
+├── Dockerfile            # Web 端容器部署入口
 ├── README.md             # 本文件
-└── probes/
-    ├── __init__.py       # HTTP 客户端 + 公共工具
-    ├── active.py         # Tier 1 主动探针
-    ├── tier4.py          # Tier 4 强证据探针
-    ├── verdict.py        # 判定引擎
-    └── report.py         # Markdown 报告生成
+├── probes/
+│   ├── __init__.py       # HTTP 客户端 + 公共工具
+│   ├── active.py         # Tier 1 主动探针
+│   ├── tier4.py          # Tier 4 强证据探针
+│   ├── verdict.py        # 判定引擎
+│   └── report.py         # Markdown 报告生成
+├── web/
+│   ├── server.py         # 标准库 Web 服务 + CLI 任务封装
+│   └── static/           # 原生 HTML/CSS/JS 可视化界面
+└── tests/
+    └── test_web_server.py
 ```
-# GminiModelCheck
