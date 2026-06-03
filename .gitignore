@@ -1,0 +1,21 @@
+# 测试产物（含真实响应数据、responseId、thoughtSignature 等，不应进公开仓库）
+reports/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+
+# 临时/审查文档（可选，按需保留）
+# FIXES.md
+# FIXES_DONE.md
+# REVIEW.md
+# TEST_DEFECTS.md
+
+# 编辑器
+.vscode/
+.idea/
+*.swp
+.DS_Store
