@@ -74,6 +74,7 @@ class RunState:
     returncode: int | None = None
     report_dir: str | None = None
     error: str | None = None
+    artifacts: dict[str, str] = field(default_factory=dict)
     events: list[dict[str, Any]] = field(default_factory=list)
     condition: threading.Condition = field(default_factory=threading.Condition)
 
@@ -88,6 +89,10 @@ class RunState:
             "report_dir": self.report_dir,
             "error": self.error,
             "request": safe_request(self.request),
+            "artifacts": {
+                name: f"/api/runs/{self.id}/artifact/{name}"
+                for name in self.artifacts
+            },
         }
 
 
@@ -96,10 +101,7 @@ def utc_now() -> str:
 
 
 def normalize_run_request(payload: dict[str, Any]) -> dict[str, Any]:
-    base = str(payload.get("base", "")).strip().rstrip("/")
-    parsed = urlparse(base)
-    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
-        raise ValueError("base must be an http or https URL")
+    base = normalize_base_url(payload.get("base", ""))
 
     keys = parse_key_lines(payload.get("keys", ""))
     if not keys:
@@ -110,6 +112,7 @@ def normalize_run_request(payload: dict[str, Any]) -> dict[str, Any]:
     sig_model = str(payload.get("sig_model") or DEFAULT_SIG_MODEL).strip() or DEFAULT_SIG_MODEL
 
     return {
+        "tool": "audit",
         "base": base,
         "keys": keys,
         "name": name,
@@ -121,6 +124,90 @@ def normalize_run_request(payload: dict[str, Any]) -> dict[str, Any]:
         "skip_active": bool(payload.get("skip_active", False)),
         "skip_tier4": bool(payload.get("skip_tier4", False)),
         "skip_cross_sig": bool(payload.get("skip_cross_sig", False)),
+    }
+
+
+def normalize_base_url(value: Any) -> str:
+    base = str(value).strip().rstrip("/")
+    parsed = urlparse(base)
+    if parsed.scheme not in {"http", "https"} or not parsed.netloc:
+        raise ValueError("base must be an http or https URL")
+    return base
+
+
+def normalize_single_key(value: Any) -> str:
+    key = str(value or "").strip()
+    if not key:
+        raise ValueError("API key is required")
+    return key
+
+
+def normalize_steps(value: Any) -> list[str]:
+    allowed = {"1a", "1b", "1c", "2a", "2b", "3a", "3b"}
+    if isinstance(value, list):
+        raw_steps = [str(item).strip() for item in value]
+    else:
+        raw_steps = str(value or "").replace(",", " ").split()
+    steps = [step for step in raw_steps if step]
+    invalid = [step for step in steps if step not in allowed]
+    if invalid:
+        raise ValueError(f"unknown manual probe step(s): {', '.join(invalid)}")
+    return steps
+
+
+def normalize_model_lines(value: Any) -> list[str]:
+    if isinstance(value, list):
+        raw_models = [str(item).strip() for item in value]
+    else:
+        raw_models = [line.strip() for line in str(value or "").splitlines()]
+    models: list[str] = []
+    seen: set[str] = set()
+    for model in raw_models:
+        if not model or model.startswith("#") or model in seen:
+            continue
+        seen.add(model)
+        models.append(model)
+    return models
+
+
+def normalize_float(value: Any, default: float, minimum: float, maximum: float) -> float:
+    if value in (None, ""):
+        return default
+    try:
+        number = float(value)
+    except (TypeError, ValueError):
+        return default
+    return max(minimum, min(maximum, number))
+
+
+def normalize_manual_probe_request(payload: dict[str, Any]) -> dict[str, Any]:
+    key = normalize_single_key(payload.get("key"))
+    return {
+        "tool": "manual_probe",
+        "base": normalize_base_url(payload.get("base", "")),
+        "key": key,
+        "keys": [("key", key)],
+        "model": str(payload.get("model") or DEFAULT_MODEL).strip() or DEFAULT_MODEL,
+        "sig_model": str(payload.get("sig_model") or DEFAULT_SIG_MODEL).strip() or DEFAULT_SIG_MODEL,
+        "steps": normalize_steps(payload.get("steps")),
+        "gap": normalize_float(payload.get("gap"), 3.0, 0.0, 60.0),
+        "timeout": bounded_int(payload.get("timeout"), DEFAULT_TIMEOUT, 10, 600),
+        "retries": bounded_int(payload.get("retries"), 3, 1, 10),
+        "self_sig_n": bounded_int(payload.get("self_sig_n"), 4, 1, 50),
+    }
+
+
+def normalize_model_enum_request(payload: dict[str, Any]) -> dict[str, Any]:
+    key = normalize_single_key(payload.get("key"))
+    return {
+        "tool": "model_enum",
+        "base": normalize_base_url(payload.get("base", "")),
+        "key": key,
+        "keys": [("key", key)],
+        "models": normalize_model_lines(payload.get("models")),
+        "gap": normalize_float(payload.get("gap"), 3.0, 0.0, 60.0),
+        "timeout": bounded_int(payload.get("timeout"), 90, 10, 600),
+        "retries": bounded_int(payload.get("retries"), 3, 1, 10),
     }
 
 
@@ -203,6 +290,65 @@ def build_audit_command(request: dict[str, Any], out_root: Path) -> list[str]:
     return command
 
 
+def build_manual_probe_command(request: dict[str, Any]) -> list[str]:
+    command = [
+        sys.executable,
+        str(ROOT / "manual_probe.py"),
+        "--base",
+        request["base"],
+        "--key",
+        request["key"],
+        "--model",
+        request["model"],
+        "--sig-model",
+        request["sig_model"],
+        "--timeout",
+        str(request["timeout"]),
+        "--retries",
+        str(request["retries"]),
+        "--gap",
+        str(request["gap"]),
+        "--self-sig-n",
+        str(request["self_sig_n"]),
+    ]
+    command.extend(request.get("steps") or [])
+    return command
+
+
+def build_model_enum_command(request: dict[str, Any], out_root: Path, run_id: str) -> list[str]:
+    out_path = out_root / f"model-enum-{run_id}.json"
+    command = [
+        sys.executable,
+        str(ROOT / "model_enum.py"),
+        "--base",
+        request["base"],
+        "--key",
+        request["key"],
+        "--out",
+        str(out_path),
+        "--gap",
+        str(request["gap"]),
+        "--timeout",
+        str(request["timeout"]),
+        "--retries",
+        str(request["retries"]),
+    ]
+    for model in request.get("models") or []:
+        command.extend(["--model", model])
+    return command
+
+
+def build_run_command(run: RunState, out_root: Path) -> list[str]:
+    tool = run.request.get("tool", "audit")
+    if tool == "manual_probe":
+        return build_manual_probe_command(run.request)
+    if tool == "model_enum":
+        out_path = out_root / f"model-enum-{run.id}.json"
+        run.artifacts["model-enum.json"] = str(out_path)
+        return build_model_enum_command(run.request, out_root, run.id)
+    return build_audit_command(run.request, out_root)
+
+
 def mask_secrets(line: str, keys: list[tuple[str, str]]) -> str:
     masked = line
     for _, secret in keys:
@@ -277,8 +423,13 @@ def append_event(run: RunState, event: dict[str, Any]) -> None:
         run.condition.notify_all()
 
 
-def create_run(payload: dict[str, Any]) -> RunState:
-    request = normalize_run_request(payload)
+def create_run(payload: dict[str, Any], tool: str = "audit") -> RunState:
+    if tool == "manual_probe":
+        request = normalize_manual_probe_request(payload)
+    elif tool == "model_enum":
+        request = normalize_model_enum_request(payload)
+    else:
+        request = normalize_run_request(payload)
     run = RunState(id=uuid.uuid4().hex[:12], request=request)
     with RUNS_LOCK:
         RUNS[run.id] = run
@@ -289,7 +440,7 @@ def create_run(payload: dict[str, Any]) -> RunState:
 
 def execute_run(run: RunState) -> None:
     REPORT_ROOT.mkdir(parents=True, exist_ok=True)
-    command = build_audit_command(run.request, REPORT_ROOT)
+    command = build_run_command(run, REPORT_ROOT)
     run.status = "running"
     run.started_at = utc_now()
     append_event(run, {
@@ -463,12 +614,27 @@ class AuditWebHandler(BaseHTTPRequestHandler):
         if not self.authorized():
             return
         parsed = urlparse(self.path)
+        if parsed.path == "/api/tools/manual-probe":
+            self.create_tool_run("manual_probe")
+            return
+        if parsed.path == "/api/tools/model-enum":
+            self.create_tool_run("model_enum")
+            return
         if parsed.path != "/api/runs":
             self.send_error(HTTPStatus.NOT_FOUND)
             return
         payload = self.read_json()
         try:
             run = create_run(payload)
+        except ValueError as exc:
+            self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
+            return
+        self.send_json(run.public(), HTTPStatus.CREATED)
+
+    def create_tool_run(self, tool: str) -> None:
+        payload = self.read_json()
+        try:
+            run = create_run(payload, tool=tool)
         except ValueError as exc:
             self.send_json({"error": str(exc)}, HTTPStatus.BAD_REQUEST)
             return
@@ -539,6 +705,9 @@ class AuditWebHandler(BaseHTTPRequestHandler):
         self.wfile.flush()
 
     def send_artifact(self, run: RunState, artifact_name: str) -> None:
+        if artifact_name in run.artifacts:
+            self.send_file(Path(run.artifacts[artifact_name]))
+            return
         if artifact_name not in {"verdict.json", "report.md"}:
             self.send_error(HTTPStatus.NOT_FOUND)
             return

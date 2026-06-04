@@ -415,13 +415,19 @@ def _decide(flags: dict[str, bool]) -> tuple[str, str]:
         oauth_signals += 1  # Tier 1 hard
     if flags.get("group_oauth_hint"):
         oauth_signals += 1  # Tier 1 soft
-    # thinking_accepted / thinking_timeout 是辅助信号
-    if flags.get("thinking_accepted") and oauth_signals >= 1:
+    # thinkingBudget=0 返回 200 原样接受 = OAuth 套壳硬指纹（方案 §14.3 单条即定论）
+    # Vertex 一定 400，AI Studio 也拒绝，只有 OAuth 套壳原样接受 → 独立强信号
+    if flags.get("thinking_accepted") and not flags.get("strict_400"):
+        oauth_signals += 2  # Tier 2 hard，单条即可定论 OAuth
+    # 改写为 -nothinking 别名:中转层做的,AI Studio/OAuth 都可能 → 仅辅助
+    if flags.get("thinking_rewritten") and oauth_signals >= 1:
         oauth_signals += 1
     if flags.get("thinking_timeout") and oauth_signals >= 1:
-        oauth_signals += 1
+        oauth_signals += 1  # 高延迟 OAuth 网络特征（§9.4b）,需配合其它信号
 
     # --- 计算 AI Studio 信号强度 ---
+    # 注意:thinkingBudget=0 被接受**不是** AI Studio 信号(AI Studio 也拒绝),
+    # 已移到 OAuth 计分(方案 §14.3 修正,旧版在此误判为 AI Studio)
     ai_signals = 0
     if flags.get("aistudio_confirmed_field"):
         ai_signals += 2  # Tier 1 hard
@@ -431,11 +437,6 @@ def _decide(flags: dict[str, bool]) -> tuple[str, str]:
         ai_signals += 1  # Tier 1 soft
     if flags.get("aistudio_likely_majority"):
         ai_signals += 1  # Tier 1 soft
-
-    # thinkingBudget=0 被接受也是 AI Studio/OAuth 信号（方案 §9.1, §13.2）
-    # Vertex 一定 400，所以接受 = 非 Vertex
-    if flags.get("thinking_accepted") and not flags.get("strict_400"):
-        ai_signals += 1  # AI Studio 或 OAuth 都可能接受，增加 AI Studio 嫌疑
 
     # --- 关键修正:AI Studio + OAuth 同时出现 = 多池 ---
     if ai_signals >= 1 and oauth_signals >= 1:

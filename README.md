@@ -30,6 +30,9 @@ python audit.py \
     --n-samples 5
 ```
 
+`--base` 支持标准 Gemini 兼容中转地址,可以是 `https://domain`、`http://IP:port`
+或带反向代理路径的 base URL。工具会自动去掉末尾 `/`。
+
 ## Web 可视化
 
 本项目也提供一个零依赖 Web 控制台,用于填写 URL / key / 模型并实时查看检测过程。
@@ -57,6 +60,8 @@ Web 端会调用同一个 `audit.py` CLI,实时展示命令行输出,检测结�
 - 检测结束后展示每个 key 的最终判定、置信度、主要证据和注意事项
 - 可视化展示字段采样分布、HTTP 头信号、Tier 4 结果和跨 key sig 矩阵
 - 保留 `verdict.json`、`report.md` 和 `raw/` 原始抓包产物
+- 在同一页面运行手工低频探针和模型枚举,复用实时命令行输出
+- 模型枚举完成后可下载 `model-enum-<runid>.json`
 
 ### Web key 输入格式
 
@@ -116,6 +121,80 @@ http://127.0.0.1:8080/?token=change-me
 
 生产或公网环境建议设置 `WEB_AUTH_TOKEN`,并将 `reports/` 挂载为持久化 volume。
 
+## 辅助排查脚本
+
+主流程仍然是 `audit.py`。以下脚本用于复核疑难样本或低频手工排查,尤其适合遇到
+限流、"信号不足"、模型别名/静默替换疑问时使用。
+
+这些辅助工具既可直接命令行运行,也可在 Web 控制台的"手工探针"和"模型枚举"页签中运行。
+Web 端会对日志里的 key 做脱敏,但仍建议使用临时测试 key。
+
+### 手工低频探针
+
+`manual_probe.py` 按决策树拆成低频单步探针,支持只跑指定步骤并设置步骤间隔:
+
+```bash
+# 跑全部步骤,每步间隔 3 秒
+python manual_probe.py \
+  --base https://relay.example.com \
+  --key "sk-xxxxx" \
+  --gap 3
+
+# 只跑指定步骤
+python manual_probe.py \
+  --base http://127.0.0.1:8088 \
+  --key "sk-xxxxx" \
+  --model gemini-3.1-pro-preview \
+  1a 1b 2a \
+  --gap 5
+```
+
+步骤号由脚本内 `STEPS` 定义。常用步骤:
+
+| 步骤 | 内容 |
+|---|---|
+| `1a` | generateContent baseline,抓响应头、`modelVersion`、`trafficType`、`serviceTier` |
+| `1b` | 错误路径泄露,抓分组名、GCP 路径、`ai.google.dev`、屏蔽痕迹 |
+| `1c` | countTokens schema,识别 Vertex 字段或端点污染 |
+| `2a` | `thinkingBudget=0`,识别严格拒绝、OAuth 原样接受、`-nothinking` 改写 |
+| `2b` | identity 自报家门 |
+| `3a` | 知识截止探针 |
+| `3b` | 自 thoughtSignature 回灌 |
+
+脚本不会保存 key,但终端历史和 shell 进程列表可能短暂暴露命令行参数。敏感环境可使用临时
+测试 key,并避免把完整命令粘贴到公开 issue 或报告中。
+
+### 模型枚举指纹
+
+`model_enum.py` 用真实 `generateContent` 调用逐个枚举模型,记录实际 `modelVersion`、
+`trafficType`、`serviceTier` 等字段,输出:
+
+```bash
+python model_enum.py \
+  --base https://relay.example.com \
+  --key "sk-xxxxx" \
+  --model gemini-3.1-pro-preview \
+  --model gemini-3-flash-preview \
+  --out reports/model-enum.json
+```
+
+也可以从文件读取模型列表:
+
+```bash
+python model_enum.py \
+  --base https://relay.example.com \
+  --key "sk-xxxxx" \
+  --models-file models.txt \
+  --gap 3
+```
+
+```text
+reports/model-enum.json
+```
+
+注意: `GET /v1beta/models` 的列表不等于真实可调用模型。模型上架、别名和静默替换都具有
+时效性,`model-enum.json` 只能视为本次实测快照,不应写死为长期固定指纹。
+
 ## 输出
 
 ```
@@ -149,6 +228,19 @@ reports/<name>-<timestamp>/
 | 知识截止探针 | 4 | 3 次调用 | 模型权重真实性(2024 大选/奥运/iPhone16) |
 | 自 sig 重复性 | 4 | 2×N 次调用 | 多上游池量化 |
 | 跨 key sig 矩阵 | 4 | K×K 次调用 | 账号拓扑揭示 |
+| 手工低频探针 | 辅助 | 按步骤 | 低频复核限流/role 校验/OAuth 指纹 |
+| 模型枚举指纹 | 辅助 | 按模型数 | 逐模型验证真实 modelVersion 与字段指纹 |
+
+## 额外指纹与已知坑点
+
+- **强制 role 校验**: 部分中转要求 `contents[].role` 显式存在。缺 role 时可能返回 400,
+  进而让主动探针看起来像"信号不足"。新版探针 payload 已补 `role: user`。
+- **`thinkingBudget=0` 返回 200**: 这是非 Vertex 的强信号。若同时没有 AI Studio 字段证据,
+  应优先怀疑 OAuth/CLI 套壳,不要简单归入 AI Studio。
+- **`-nothinking` / 422**: 中转可能把禁用 thinking 的请求改写到 `-nothinking` 别名,
+  或在不支持别名时返回 422。该现象需要结合字段采样、响应头和手工探针复核。
+- **`x-accel-buffering: no`**: 常见于反向代理/流式转发链路,只能作为链路形态提示,
+  不能单独证明上游渠道。
 
 ## 命令行参数
 
@@ -196,6 +288,15 @@ A: 模型没有返回 thoughtSignature，尝试：
 **Q: 知识探针超时？**  
 A: 增加 `--timeout 180` 或检查网络连接。
 
+**Q: 判定为"信号不足"怎么办？**
+A: 先看 `verdict.json` 里的字段采样有效数和错误数。如果是限流,降低 `--n-samples`、
+增加 `--timeout` 或换时段重测。如果大量 400 与 role 校验有关,确认使用的是新版探针;
+仍无法判断时用 `manual_probe.py` 低频跑关键步骤复核。
+
+**Q: 为什么模型枚举结果和模型列表不一致？**
+A: 中转的模型列表可能是静态配置或别名映射,不代表真实可调用上游。以
+`model_enum.py` 的真实调用结果和返回的 `modelVersion` 作为本次快照参考。
+
 ### 选型决策树
 
 ```
@@ -212,6 +313,10 @@ A: 增加 `--timeout 180` 或检查网络连接。
 - 无法区分 AI Studio 的 free / standard tier（仅知道有 serviceTier 字段）
 - countTokens 在部分中转上被转发到 generateContent，探针失效
 - 延迟分布探针（§8.2）未实现，无法精确测量跳数
+- 判定逻辑会随实测修正演进。发生判定语义变更后,旧版 `verdict.json` 不应与新版结论
+  直接横向对比。
+- `reports/` 和 `reports/model-enum.json` 可能包含渠道、响应头、responseId、thoughtSignature
+  等敏感信息,公开前需要脱敏。
 
 ## 项目结构
 
@@ -220,6 +325,8 @@ gemini-relay-audit/
 ├── audit.py              # 主入口(CLI + 编排)
 ├── Dockerfile            # Web 端容器部署入口
 ├── README.md             # 本文件
+├── manual_probe.py       # 可选:手工低频决策树探针
+├── model_enum.py         # 可选:全模型真实调用枚举
 ├── probes/
 │   ├── __init__.py       # HTTP 客户端 + 公共工具
 │   ├── active.py         # Tier 1 主动探针

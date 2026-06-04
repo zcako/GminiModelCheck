@@ -88,6 +88,53 @@ class WebServerHelpersTest(unittest.TestCase):
         done_event = server.classify_cli_line("[OK] report.md    -> reports/demo/report.md")
         self.assertEqual(done_event["kind"], "artifact")
 
+    def test_build_manual_probe_command_uses_safe_argument_list(self):
+        request = server.normalize_manual_probe_request({
+            "base": " http://127.0.0.1:8088/ ",
+            "key": "sk-manual",
+            "model": "gemini-main",
+            "sig_model": "gemini-sig",
+            "steps": ["1a", "2a", "3b"],
+            "gap": "5",
+            "timeout": "45",
+            "retries": "2",
+            "self_sig_n": "3",
+        })
+
+        command = server.build_manual_probe_command(request)
+
+        self.assertIs(command[0], sys.executable)
+        self.assertIn(str(ROOT / "manual_probe.py"), command)
+        self.assertIn("--base", command)
+        self.assertIn("http://127.0.0.1:8088", command)
+        self.assertIn("--key", command)
+        self.assertIn("sk-manual", command)
+        self.assertIn("1a", command)
+        self.assertIn("2a", command)
+        self.assertIn("3b", command)
+        self.assertEqual(request["keys"], [("key", "sk-manual")])
+
+    def test_build_model_enum_command_writes_run_scoped_output(self):
+        request = server.normalize_model_enum_request({
+            "base": "https://relay.example.com/",
+            "key": "sk-enum",
+            "models": "gemini-a\ngemini-b\n\n# ignored",
+            "gap": "0",
+            "timeout": "30",
+            "retries": "1",
+        })
+
+        command = server.build_model_enum_command(request, ROOT / "reports", "run123")
+
+        self.assertIs(command[0], sys.executable)
+        self.assertIn(str(ROOT / "model_enum.py"), command)
+        self.assertIn("--model", command)
+        self.assertIn("gemini-a", command)
+        self.assertIn("gemini-b", command)
+        self.assertIn("--out", command)
+        self.assertIn(str(ROOT / "reports" / "model-enum-run123.json"), command)
+        self.assertEqual(request["keys"], [("key", "sk-enum")])
+
 
 if __name__ == "__main__":
     unittest.main()

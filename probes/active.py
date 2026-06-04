@@ -77,7 +77,7 @@ def probe_field_sampling(
     注意:非 200 响应(限流 429/503 等)是临时网络状态而非渠道指纹,
     单独计入 error_count,不污染 upstream 分类(方案 §7)。
     """
-    payload = {"contents": [{"parts": [{"text": "reply with: ok"}]}]}
+    payload = {"contents": [{"role": "user", "parts": [{"text": "reply with: ok"}]}]}
     samples = []
     upstream_count = {"vertex_likely": 0, "aistudio_likely": 0, "aistudio_confirmed": 0, "unknown": 0}
     mv_count: dict[str, int] = {}
@@ -144,7 +144,7 @@ def probe_thinking_budget_zero(
     2. 触发完整推理，延迟 15-60s（方案 §9.4b）
     """
     payload = {
-        "contents": [{"parts": [{"text": "reply with: ok"}]}],
+        "contents": [{"role": "user", "parts": [{"text": "reply with: ok"}]}],
         "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}},
     }
     status, data, hdrs = post_generate(base, model, api_key, payload, timeout=90)
@@ -188,7 +188,7 @@ def probe_error_path_leak(
     out_dir: Path,
 ) -> dict:
     """请求一个不存在的模型,捕获错误信息里的内部分组/上游路径"""
-    payload = {"contents": [{"parts": [{"text": "x"}]}]}
+    payload = {"contents": [{"role": "user", "parts": [{"text": "x"}]}]}
     status, data, hdrs = post_generate(
         base, "gemini-not-real-9.9", api_key, payload, timeout=30,
     )
@@ -252,7 +252,7 @@ def probe_http_headers(
     out_dir: Path,
 ) -> dict:
     """完整抓包响应头,识别 X-Gemini-Service-Tier / X-Routing-Group / X-New-Api-Version 等"""
-    payload = {"contents": [{"parts": [{"text": "ok"}]}]}
+    payload = {"contents": [{"role": "user", "parts": [{"text": "ok"}]}]}
     status, data, hdrs = post_generate(base, model, api_key, payload, timeout=60)
     save_raw(out_dir, "p5-headers.json", {"status": status, "headers": hdrs})
 
@@ -317,7 +317,7 @@ def probe_count_tokens(
     注意：部分中转会把 countTokens 转发到 generateContent (方案 §五 已知坑点)，
     导致返回完整的 candidates 数组而非简单的 token 统计。
     """
-    payload = {"contents": [{"parts": [{"text": "hello world"}]}]}
+    payload = {"contents": [{"role": "user", "parts": [{"text": "hello world"}]}]}
     status, data, hdrs = post_count_tokens(base, model, api_key, payload, timeout=30)
     save_raw(out_dir, "p6-countTokens.json", {"status": status, "body": data})
 
@@ -377,6 +377,7 @@ def probe_identity(
     """身份探针:让模型自报家门(Tier 2,会被 system prompt 改写)"""
     payload = {
         "contents": [{
+            "role": "user",
             "parts": [{
                 "text": "In one short sentence: which AI model are you, and what is your knowledge cutoff date?"
             }]

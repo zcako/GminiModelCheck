@@ -1,5 +1,34 @@
 # Changelog
 
+## [Unreleased] - 2026-06-04
+
+### 文档补充
+
+- 补充 Web/CLI base URL 说明,明确支持 `http://IP:port` 形态。
+- 补充 `manual_probe.py` 手工低频探针用法,用于复核限流、role 校验和 OAuth 指纹。
+- 补充 `model_enum.py` 模型枚举指纹说明,强调模型枚举结果是实测快照,不可当作长期固定指纹。
+- 补充"信号不足"排查路径:区分限流、role 校验和数据不足,并指向低频手工探针。
+- 补充敏感信息提示:辅助脚本中的真实 key、`reports/` 和 `model-enum.json` 公开前必须脱敏。
+
+### 工具脚本
+
+- `manual_probe.py` 改为通过 `--base`、`--key`、`--model`、`--sig-model` 等参数运行,
+  删除硬编码真实凭据,并补齐 role 校验、`thinkingBudget=0`、`-nothinking` 和响应头指纹输出。
+- `model_enum.py` 改为可安全导入的 CLI 工具,支持 `--model`、`--models-file`、`--out`、
+  `--gap`、`--timeout` 和 429 重试,输出别名和 `-nothinking` 标记。
+
+### Web
+
+- Web 控制台新增"手工探针"和"模型枚举"页签,可从页面运行辅助脚本并实时查看 stdout 日志。
+- Web 后端新增 `/api/tools/manual-probe` 与 `/api/tools/model-enum` 接口,复用现有 run 状态和
+  SSE 日志流。
+- 模型枚举 Web 任务会输出 `reports/model-enum-<runid>.json`,并在结果区提供下载链接。
+
+### 行为说明
+
+- `thinkingBudget=0 -> 200 accepted_as_is` 的判定语义会影响历史结论对比。旧版
+  `verdict.json` 不应直接与新版判定横向比较。
+
 ## [1.1.4] - 2026-06-03
 
 ### 云雾 yunwu.ai「优质gemini」分组实测发现的缺陷

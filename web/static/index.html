@@ -17,7 +17,13 @@
         <div id="statusPill" class="status-pill idle">Idle</div>
       </header>
 
-      <form id="auditForm" class="form-grid">
+      <nav class="tool-tabs" aria-label="工具选择">
+        <button type="button" class="active" data-tab="audit">完整审计</button>
+        <button type="button" data-tab="manual">手工探针</button>
+        <button type="button" data-tab="model-enum">模型枚举</button>
+      </nav>
+
+      <form id="auditForm" class="form-grid tool-form active" data-tool-panel="audit">
         <label>
           <span>Base URL</span>
           <input name="base" type="url" placeholder="https://example.com" required>
@@ -73,6 +79,84 @@
           <button id="startButton" type="submit">开始检测</button>
         </div>
       </form>
+
+      <form id="manualProbeForm" class="form-grid tool-form hidden" data-tool-panel="manual">
+        <label>
+          <span>Base URL</span>
+          <input name="base" type="url" placeholder="https://example.com" required>
+        </label>
+        <label>
+          <span>API Key</span>
+          <input name="key" type="password" placeholder="sk-xxx" required>
+        </label>
+        <label>
+          <span>主模型</span>
+          <input name="model" type="text" value="gemini-3.1-pro-preview">
+        </label>
+        <label>
+          <span>Sig 模型</span>
+          <input name="sig_model" type="text" value="gemini-3-flash-preview">
+        </label>
+        <fieldset class="step-grid wide">
+          <legend>步骤</legend>
+          <label class="check"><input name="steps" type="checkbox" value="1a" checked><span>1a baseline</span></label>
+          <label class="check"><input name="steps" type="checkbox" value="1b" checked><span>1b error leak</span></label>
+          <label class="check"><input name="steps" type="checkbox" value="1c" checked><span>1c countTokens</span></label>
+          <label class="check"><input name="steps" type="checkbox" value="2a" checked><span>2a thinkingBudget=0</span></label>
+          <label class="check"><input name="steps" type="checkbox" value="2b"><span>2b identity</span></label>
+          <label class="check"><input name="steps" type="checkbox" value="3a"><span>3a knowledge</span></label>
+          <label class="check"><input name="steps" type="checkbox" value="3b"><span>3b self sig</span></label>
+        </fieldset>
+        <label>
+          <span>步骤间隔</span>
+          <input name="gap" type="number" min="0" max="60" step="0.5" value="3">
+        </label>
+        <label>
+          <span>超时秒数</span>
+          <input name="timeout" type="number" min="10" max="600" value="120">
+        </label>
+        <label>
+          <span>重试次数</span>
+          <input name="retries" type="number" min="1" max="10" value="3">
+        </label>
+        <label>
+          <span>自 sig N</span>
+          <input name="self_sig_n" type="number" min="1" max="50" value="4">
+        </label>
+        <div class="actions wide">
+          <button id="manualStartButton" type="submit">运行手工探针</button>
+        </div>
+      </form>
+
+      <form id="modelEnumForm" class="form-grid tool-form hidden" data-tool-panel="model-enum">
+        <label>
+          <span>Base URL</span>
+          <input name="base" type="url" placeholder="https://example.com" required>
+        </label>
+        <label>
+          <span>API Key</span>
+          <input name="key" type="password" placeholder="sk-xxx" required>
+        </label>
+        <label class="wide">
+          <span>模型列表</span>
+          <textarea name="models" rows="8" placeholder="gemini-3.1-pro-preview&#10;gemini-3-flash-preview"></textarea>
+        </label>
+        <label>
+          <span>调用间隔</span>
+          <input name="gap" type="number" min="0" max="60" step="0.5" value="3">
+        </label>
+        <label>
+          <span>超时秒数</span>
+          <input name="timeout" type="number" min="10" max="600" value="90">
+        </label>
+        <label>
+          <span>重试次数</span>
+          <input name="retries" type="number" min="1" max="10" value="3">
+        </label>
+        <div class="actions wide">
+          <button id="modelEnumStartButton" type="submit">运行模型枚举</button>
+        </div>
+      </form>
     </section>
 
     <section class="run-panel">
@@ -92,7 +176,7 @@
     <section id="reportPanel" class="report-panel hidden">
       <div class="report-head">
         <div>
-          <h2>可视化报告</h2>
+          <h2 id="reportTitle">可视化报告</h2>
           <p id="reportMeta"></p>
         </div>
         <div id="artifactLinks" class="artifact-links"></div>

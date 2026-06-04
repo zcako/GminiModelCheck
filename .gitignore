@@ -7,7 +7,8 @@ __pycache__/
 *.egg-info/
 .venv/
 venv/
-web-server*.log
+web-*.log
+.omx/
 
 # 临时/审查文档（可选，按需保留）
 # FIXES.md

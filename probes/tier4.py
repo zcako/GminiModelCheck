@@ -77,7 +77,7 @@ def probe_knowledge(
     results = []
     for q in KNOWLEDGE_QUESTIONS:
         payload = {
-            "contents": [{"parts": [{"text": q["q"]}]}],
+            "contents": [{"role": "user", "parts": [{"text": q["q"]}]}],
             "generationConfig": {
                 # -1 = 动态思考(模型自决);给足输出预算,避免 thinking 吃光配额
                 "thinkingConfig": {"thinkingBudget": -1},
@@ -142,7 +142,7 @@ def _get_sig_parts(base: str, model: str, key: str, prompt: str) -> tuple[int, l
     status, data, _ = post_generate(
         base, model, key,
         {
-            "contents": [{"parts": [{"text": prompt}]}],
+            "contents": [{"role": "user", "parts": [{"text": prompt}]}],
             "generationConfig": {"thinkingConfig": {"includeThoughts": True, "thinkingBudget": 1024}},
         },
         timeout=120,
