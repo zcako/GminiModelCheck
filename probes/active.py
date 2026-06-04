@@ -84,7 +84,7 @@ def probe_field_sampling(
     error_count = 0  # 非 200 响应数(限流等),不计入指纹统计
 
     for i in range(1, n + 1):
-        status, data, hdrs = post_generate(base, model, api_key, payload, timeout=120)
+        status, data, hdrs = post_generate(base, model, api_key, payload, timeout=120, out_dir=out_dir)
         if status != 200:
             # 限流/错误样本单独记录,不污染 upstream 分类
             error_count += 1
@@ -147,7 +147,7 @@ def probe_thinking_budget_zero(
         "contents": [{"role": "user", "parts": [{"text": "reply with: ok"}]}],
         "generationConfig": {"thinkingConfig": {"thinkingBudget": 0}},
     }
-    status, data, hdrs = post_generate(base, model, api_key, payload, timeout=90)
+    status, data, hdrs = post_generate(base, model, api_key, payload, timeout=90, out_dir=out_dir)
     save_raw(out_dir, "p1-thinkingBudget0.json", {"status": status, "headers": hdrs, "body": data})
 
     note = None
@@ -190,7 +190,7 @@ def probe_error_path_leak(
     """请求一个不存在的模型,捕获错误信息里的内部分组/上游路径"""
     payload = {"contents": [{"role": "user", "parts": [{"text": "x"}]}]}
     status, data, hdrs = post_generate(
-        base, "gemini-not-real-9.9", api_key, payload, timeout=30,
+        base, "gemini-not-real-9.9", api_key, payload, timeout=30, out_dir=out_dir,
     )
     save_raw(out_dir, "p3-error-leak.json", {"status": status, "headers": hdrs, "body": data})
 
@@ -234,7 +234,7 @@ def probe_cached_contents(
 ) -> dict:
     """GET /v1beta/cachedContents — Vertex 路径行为 vs 中转屏蔽"""
     status, body, hdrs = get_url(
-        f"{base}/v1beta/cachedContents", api_key, timeout=30,
+        f"{base}/v1beta/cachedContents", api_key, timeout=30, out_dir=out_dir,
     )
     save_raw(out_dir, "p4-cachedContents.txt", body)
     return {
@@ -253,7 +253,7 @@ def probe_http_headers(
 ) -> dict:
     """完整抓包响应头,识别 X-Gemini-Service-Tier / X-Routing-Group / X-New-Api-Version 等"""
     payload = {"contents": [{"role": "user", "parts": [{"text": "ok"}]}]}
-    status, data, hdrs = post_generate(base, model, api_key, payload, timeout=60)
+    status, data, hdrs = post_generate(base, model, api_key, payload, timeout=60, out_dir=out_dir)
     save_raw(out_dir, "p5-headers.json", {"status": status, "headers": hdrs})
 
     interesting = {}
@@ -318,7 +318,7 @@ def probe_count_tokens(
     导致返回完整的 candidates 数组而非简单的 token 统计。
     """
     payload = {"contents": [{"role": "user", "parts": [{"text": "hello world"}]}]}
-    status, data, hdrs = post_count_tokens(base, model, api_key, payload, timeout=30)
+    status, data, hdrs = post_count_tokens(base, model, api_key, payload, timeout=30, out_dir=out_dir)
     save_raw(out_dir, "p6-countTokens.json", {"status": status, "body": data})
 
     if status != 200:
@@ -383,7 +383,7 @@ def probe_identity(
             }]
         }],
     }
-    status, data, hdrs = post_generate(base, model, api_key, payload, timeout=90)
+    status, data, hdrs = post_generate(base, model, api_key, payload, timeout=90, out_dir=out_dir)
     save_raw(out_dir, "p7-identity.json", {"status": status, "body": data})
 
     # 非 200(限流等)或空响应:标注原因,不当作有效身份信号

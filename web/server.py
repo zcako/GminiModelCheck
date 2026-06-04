@@ -672,8 +672,20 @@ class AuditWebHandler(BaseHTTPRequestHandler):
             return
         body = path.read_bytes()
         content_type, _ = mimetypes.guess_type(str(path))
+        if not content_type:
+            if path.suffix == ".md":
+                content_type = "text/markdown"
+            elif path.suffix == ".json":
+                content_type = "application/json"
+            else:
+                content_type = "application/octet-stream"
+
+        if content_type.startswith("text/") or content_type.startswith("application/json"):
+            if "charset=" not in content_type:
+                content_type += "; charset=utf-8"
+
         self.send_response(HTTPStatus.OK)
-        self.send_header("Content-Type", content_type or "application/octet-stream")
+        self.send_header("Content-Type", content_type)
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)

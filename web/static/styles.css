@@ -33,12 +33,18 @@ textarea {
 }
 
 .app-shell {
-  display: grid;
-  grid-template-columns: minmax(340px, 440px) minmax(0, 1fr);
+  display: flex;
+  flex-direction: column;
   gap: 16px;
   width: min(1600px, 100%);
   margin: 0 auto;
   padding: 16px;
+}
+
+.dashboard-top {
+  display: grid;
+  grid-template-columns: minmax(340px, 440px) minmax(0, 1fr);
+  gap: 16px;
 }
 
 .control-panel,
@@ -483,7 +489,7 @@ button:disabled {
 }
 
 @media (max-width: 980px) {
-  .app-shell,
+  .dashboard-top,
   .run-panel {
     grid-template-columns: 1fr;
   }

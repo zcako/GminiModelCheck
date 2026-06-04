@@ -84,7 +84,7 @@ def probe_knowledge(
                 "maxOutputTokens": 2048,
             },
         }
-        status, data, _ = post_generate(base, model, api_key, payload, timeout=90)
+        status, data, _ = post_generate(base, model, api_key, payload, timeout=90, out_dir=out_dir)
         text = ""
         for p in safe_get(data, "candidates", 0, "content", "parts") or []:
             if isinstance(p, dict) and "text" in p:
@@ -137,7 +137,7 @@ def probe_knowledge(
     }
 
 
-def _get_sig_parts(base: str, model: str, key: str, prompt: str) -> tuple[int, list]:
+def _get_sig_parts(base: str, model: str, key: str, prompt: str, out_dir: Path | None = None) -> tuple[int, list]:
     """第一轮拿 thoughtSignature"""
     status, data, _ = post_generate(
         base, model, key,
@@ -146,6 +146,7 @@ def _get_sig_parts(base: str, model: str, key: str, prompt: str) -> tuple[int, l
             "generationConfig": {"thinkingConfig": {"includeThoughts": True, "thinkingBudget": 1024}},
         },
         timeout=120,
+        out_dir=out_dir,
     )
     if status != 200:
         return status, []
@@ -153,7 +154,7 @@ def _get_sig_parts(base: str, model: str, key: str, prompt: str) -> tuple[int, l
     return status, parts
 
 
-def _replay_sig(base: str, model: str, key: str, prompt: str, parts: list, follow_up: str) -> tuple[int, dict]:
+def _replay_sig(base: str, model: str, key: str, prompt: str, parts: list, follow_up: str, out_dir: Path | None = None) -> tuple[int, dict]:
     """第二轮回灌 sig"""
     return post_generate(
         base, model, key,
@@ -166,6 +167,7 @@ def _replay_sig(base: str, model: str, key: str, prompt: str, parts: list, follo
             "generationConfig": {"thinkingConfig": {"includeThoughts": True, "thinkingBudget": 1024}},
         },
         timeout=120,
+        out_dir=out_dir,
     )[:2]
 
 
@@ -192,7 +194,7 @@ def probe_self_sig(
     no_sig = 0
 
     for i in range(1, n + 1):
-        s1, parts = _get_sig_parts(base, model, api_key, PROMPT)
+        s1, parts = _get_sig_parts(base, model, api_key, PROMPT, out_dir=out_dir)
         if s1 != 200:
             results.append({"i": i, "status": "step1_fail", "step1_status": s1})
             step1_fail += 1
@@ -201,7 +203,7 @@ def probe_self_sig(
             results.append({"i": i, "status": "no_sig", "step1_status": s1})
             no_sig += 1
             continue
-        s2, body = _replay_sig(base, model, api_key, PROMPT, parts, FOLLOW)
+        s2, body = _replay_sig(base, model, api_key, PROMPT, parts, FOLLOW, out_dir=out_dir)
         if s2 == 200:
             pass_count += 1
             results.append({"i": i, "status": "PASS"})
@@ -261,7 +263,7 @@ def probe_cross_sig(
     # 先各自拿一轮 sig
     sigs = {}
     for name, key in keys.items():
-        s, parts = _get_sig_parts(base, model, key, PROMPT)
+        s, parts = _get_sig_parts(base, model, key, PROMPT, out_dir=out_dir)
         if s == 200 and parts:
             sigs[name] = parts
         else:
@@ -277,7 +279,7 @@ def probe_cross_sig(
                 matrix[src][dst] = {"status": "src_no_sig"}
             continue
         for dst, dst_key in keys.items():
-            s, body = _replay_sig(base, model, dst_key, PROMPT, parts, FOLLOW)
+            s, body = _replay_sig(base, model, dst_key, PROMPT, parts, FOLLOW, out_dir=out_dir)
             err = safe_get(body, "error", "message") if s != 200 else ""
             matrix[src][dst] = {
                 "status": "PASS" if s == 200 else f"FAIL({s})",
