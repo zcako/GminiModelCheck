@@ -44,28 +44,40 @@ class ManualProbeTest(unittest.TestCase):
         self.assertEqual(payload["contents"][0]["role"], "user")
         self.assertEqual(payload["contents"][0]["parts"][0]["text"], "reply with: ok")
 
-    def test_thinking_budget_result_flags_oauth_and_nothinking(self):
+    def test_thinking_budget_result_is_model_aware(self):
         import manual_probe
 
-        oauth = manual_probe.classify_thinking_budget_result(
+        flash_ok = manual_probe.classify_thinking_budget_result(
+            "gemini-2.5-flash",
             200,
-            {"modelVersion": "gemini-3.1-pro-preview"},
+            {"modelVersion": "gemini-2.5-flash"},
+            elapsed=1.5,
+        )
+        pro_bad = manual_probe.classify_thinking_budget_result(
+            "gemini-2.5-pro",
+            200,
+            {"modelVersion": "gemini-2.5-pro"},
             elapsed=1.5,
         )
         rewritten = manual_probe.classify_thinking_budget_result(
+            "gemini-2.5-flash",
             200,
             {"modelVersion": "gemini-2.5-flash-nothinking"},
             elapsed=1.5,
         )
         strict = manual_probe.classify_thinking_budget_result(
+            "gemini-2.5-pro",
             400,
             {"error": {"message": "invalid thinkingBudget"}},
             elapsed=0.4,
         )
 
-        self.assertEqual(oauth["signal"], "oauth_accepted_as_is")
+        self.assertEqual(flash_ok["signal"], "zero_supported_accept")
+        self.assertFalse(flash_ok["oauth_suspect"])
+        self.assertEqual(pro_bad["signal"], "unexpected_accept")
+        self.assertTrue(pro_bad["oauth_suspect"])
         self.assertEqual(rewritten["signal"], "rewritten_to_nothinking")
-        self.assertEqual(strict["signal"], "strict_reject")
+        self.assertEqual(strict["signal"], "strict_reject_expected")
 
     def test_interesting_headers_include_accel_buffering(self):
         import manual_probe

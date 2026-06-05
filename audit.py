@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Gemini Relay Audit — 一键审计 Gemini 中转站的真实上游渠道
 
-按 Gemini中转站渠道识别方案 v1.8 实现。
+按 Gemini中转站渠道识别方案 v1.9 实现。
 零依赖 (仅 Python 标准库),Windows / Linux / macOS 通用。
 
 用法:
@@ -59,7 +59,7 @@ def parse_keys(items: list[str]) -> list[tuple[str, str]]:
 def main() -> int:
     parser = argparse.ArgumentParser(
         prog="audit.py",
-        description="审计 Gemini 中转站的真实上游渠道(基于 v1.8 方案)",
+        description="审计 Gemini 中转站的真实上游渠道(基于 v1.9 方案)",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=__doc__,
     )
@@ -180,8 +180,8 @@ def main() -> int:
             "n_self_sig": ctx["n_self_sig"],
             "started_at": ts,
             "keys": [name for name, _ in keys],
-            "tool_version": "1.1.4",
-            "scheme_version": "v1.8",
+            "tool_version": "1.1.5",
+            "scheme_version": "v1.9",
         },
         "per_key": {},
         "cross_sig_matrix": None,

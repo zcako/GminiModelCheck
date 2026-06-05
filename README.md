@@ -1,6 +1,6 @@
 # Gemini Relay Audit — 一键审计 Gemini 中转站
 
-基于 [Gemini 中转站渠道识别方案 v1.8](../Gemini中转站渠道识别方案.md) 的自动化 Python 工具。
+基于 [Gemini 中转站渠道识别方案 v1.9](../Gemini中转站渠道识别方案.md) 的自动化 Python 工具。
 
 **零外部依赖** — 仅 Python 3.10+ 标准库即可运行。
 
@@ -156,7 +156,7 @@ python manual_probe.py \
 | `1a` | generateContent baseline,抓响应头、`modelVersion`、`trafficType`、`serviceTier` |
 | `1b` | 错误路径泄露,抓分组名、GCP 路径、`ai.google.dev`、屏蔽痕迹 |
 | `1c` | countTokens schema,识别 Vertex 字段或端点污染 |
-| `2a` | `thinkingBudget=0`,识别严格拒绝、OAuth 原样接受、`-nothinking` 改写 |
+| `2a` | `thinkingBudget=0`,按模型能力区分 Flash 正常接受、Pro 严格拒绝、异常接受/`-nothinking` 改写 |
 | `2b` | identity 自报家门 |
 | `3a` | 知识截止探针 |
 | `3b` | 自 thoughtSignature 回灌 |
@@ -218,7 +218,7 @@ reports/<name>-<timestamp>/
 
 | 探针 | Tier | 成本(单 key) | 识别内容 |
 |---|---|---|---|
-| thinkingBudget=0 | 2 | 1 次调用 | Vertex 一定 400;OAuth 套壳接受 |
+| thinkingBudget=0 | 2 | 1 次调用 | 模型能力感知:Flash 200 正常;Pro/不支持关 thinking 路由异常 200 才是 OAuth/改写嫌疑 |
 | N 字段采样 | 1 | N 次调用(默认 20) | trafficType/serviceTier 分布,占位符率 |
 | 错误路径泄露 | 2 | 1 次调用 | 分组名泄露,Vertex/AI Studio 路径残留 |
 | cachedContents | 1 | 1 次调用 | 端点屏蔽 vs 转发 |
@@ -235,8 +235,9 @@ reports/<name>-<timestamp>/
 
 - **强制 role 校验**: 部分中转要求 `contents[].role` 显式存在。缺 role 时可能返回 400,
   进而让主动探针看起来像"信号不足"。新版探针 payload 已补 `role: user`。
-- **`thinkingBudget=0` 返回 200**: 这是非 Vertex 的强信号。若同时没有 AI Studio 字段证据,
-  应优先怀疑 OAuth/CLI 套壳,不要简单归入 AI Studio。
+- **`thinkingBudget=0` 返回 200**: v1.9 起必须按模型能力判读。2.5 Flash / Flash-Lite
+  接受 0 是官方行为,不能单独判 OAuth。Pro 或明确不支持关闭 thinking 的路由异常 200,
+  才是 OAuth/CLI 套壳或中转改写嫌疑,并且需要结合响应头、identity、sig 等证据。
 - **`-nothinking` / 422**: 中转可能把禁用 thinking 的请求改写到 `-nothinking` 别名,
   或在不支持别名时返回 422。该现象需要结合字段采样、响应头和手工探针复核。
 - **`x-accel-buffering: no`**: 常见于反向代理/流式转发链路,只能作为链路形态提示,
@@ -262,7 +263,7 @@ reports/<name>-<timestamp>/
 
 ## 判定逻辑
 
-遵循方案 v1.8 §十四 的标准化决策树。
+遵循方案 v1.9 §十四 的标准化决策树。
 
 ## 如何解读报告
 

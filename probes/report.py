@@ -9,7 +9,7 @@ def render(raw: dict) -> str:
     lines: list[str] = []
     lines.append(f"# Gemini 中转审计报告 — {meta.get('name', '?')}")
     lines.append("")
-    lines.append(f"> 基于 [Gemini 中转站渠道识别方案 {meta.get('scheme_version', 'v1.8')}](../../Gemini中转站渠道识别方案.md)")
+    lines.append(f"> 基于 [Gemini 中转站渠道识别方案 {meta.get('scheme_version', 'v1.9')}](../../Gemini中转站渠道识别方案.md)")
     lines.append(f"> 工具:gemini-relay-audit {meta.get('tool_version', '?')}")
     lines.append(f"> 时间:{meta.get('started_at', '?')}")
     lines.append("")
@@ -112,6 +112,14 @@ def render(raw: dict) -> str:
             lines.append(f"- HTTP {tb.get('status')} → `{tb.get('verdict')}`")
             if tb.get("modelVersion"):
                 lines.append(f"- 返回 modelVersion:`{tb['modelVersion']}`")
+            if tb.get("capability"):
+                lines.append(f"- 模型能力判读:`{tb['capability']}`")
+            if tb.get("signal"):
+                lines.append(f"- v1.9 信号:`{tb['signal']}`")
+            if "oauth_suspect" in tb:
+                lines.append(f"- OAuth 嫌疑:`{tb.get('oauth_suspect')}`")
+            if tb.get("note"):
+                lines.append(f"- 说明:{tb['note']}")
             if tb.get("error_message"):
                 lines.append(f"- 错误片段:`{tb['error_message']}`")
             lines.append("")

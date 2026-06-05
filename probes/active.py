@@ -13,6 +13,7 @@ from . import (
     safe_get,
     clip,
 )
+from .thinking import classify_thinking_budget_zero
 
 
 def run_all(ctx: dict, kname: str, kval: str) -> dict:
@@ -137,11 +138,11 @@ def probe_thinking_budget_zero(
     api_key: str,
     out_dir: Path,
 ) -> dict:
-    """thinkingBudget=0:Vertex 一定 400,AI Studio 通常拒绝。
+    """Probe thinkingBudget=0 using scheme v1.9 model-aware semantics.
 
-    OAuth 套壳可能：
-    1. 接受并返回 200（改写为 -nothinking 别名）
-    2. 触发完整推理，延迟 15-60s（方案 §9.4b）
+    Flash / Flash-Lite accepting 0 is official behavior and not OAuth proof.
+    Pro / no-thinking-disallowed routes accepting 0 are OAuth or relay-rewrite
+    suspects and must be cross-checked with routing headers, identity, and sig.
     """
     payload = {
         "contents": [{"role": "user", "parts": [{"text": "reply with: ok"}]}],
@@ -149,36 +150,19 @@ def probe_thinking_budget_zero(
     }
     status, data, hdrs = post_generate(base, model, api_key, payload, timeout=90, out_dir=out_dir)
     save_raw(out_dir, "p1-thinkingBudget0.json", {"status": status, "headers": hdrs, "body": data})
-
-    note = None
-    if status == 400:
-        verdict = "vertex_or_strict"  # Vertex 严格拒绝
-        signal = "rejected_400"
-    elif status == 200:
-        # 接受了 -- 可能是 AI Studio 也可能是 OAuth 套壳
-        mv = data.get("modelVersion", "")
-        if "nothinking" in mv:
-            verdict = "rewritten_to_nothinking"  # 中转把它改成了别名
-            signal = "rewritten"
-        else:
-            verdict = "accepted_as_is"
-            signal = "accepted"
-    elif status == -1:
-        verdict = "timeout"
-        signal = "timeout"
-        note = "OAuth 套壳上游可能触发完整推理导致超时（方案 §9.4b）"
-    else:
-        verdict = f"other_status_{status}"
-        signal = f"status_{status}"
+    verdict = classify_thinking_budget_zero(
+        requested_model=model,
+        status=status,
+        body=data if isinstance(data, dict) else {},
+        elapsed=0.0,
+    )
 
     return {
         "name": "thinkingBudget_zero",
         "status": status,
-        "verdict": verdict,
-        "signal": signal,
-        "modelVersion": data.get("modelVersion") if isinstance(data, dict) else None,
-        "error_message": clip(safe_get(data, "error", "message") or "", 200),
-        "note": note,
+        "verdict": verdict["signal"],
+        **verdict,
+        "error_message": clip(safe_get(data, "error", "message") or verdict.get("error_message") or "", 200),
     }
 
 

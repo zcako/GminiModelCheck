@@ -123,40 +123,30 @@ def _judge_one(kname: str, perdata: dict, cross_matrix: dict | None) -> dict:
 
     # ---------- Tier 1/2 主动探针 ----------
     tb0 = active.get("thinkingBudget_zero") or {}
-    if tb0.get("status") == 400:
+    if tb0:
+        signal = tb0.get("signal")
+        capability = tb0.get("capability")
+        status = tb0.get("status")
+        fact = f"{status} {signal or ''}".strip()
+        implication = tb0.get("note") or "thinkingBudget=0 probe recorded."
         evidence.append({
             "tier": 2,
             "name": "thinkingBudget=0",
-            "fact": "400 Bad Request",
-            "implication": "上游严格拒绝(Vertex 一定 400, AI Studio 通常也拒绝, OAuth 套壳不拒绝)",
+            "fact": fact,
+            "implication": implication,
         })
-        flags["strict_400"] = True
-    elif tb0.get("status") == 200:
-        mv = tb0.get("modelVersion", "")
-        if "nothinking" in (mv or ""):
-            evidence.append({
-                "tier": 2,
-                "name": "thinkingBudget=0",
-                "fact": f"200 OK,modelVersion={mv}",
-                "implication": "中转改写为 -nothinking 别名(AI Studio 或 OAuth 都可能)",
-            })
+        if tb0.get("hard_oauth_evidence"):
+            flags["thinking_unexpected_accept"] = True
+        if tb0.get("oauth_suspect"):
+            flags["thinking_oauth_suspect"] = True
+        if tb0.get("latency_warning"):
+            flags["thinking_timeout"] = True
+        if signal in {"strict_reject_expected", "strict_reject"}:
+            flags["strict_400"] = True
+        if signal == "rewritten_to_nothinking":
             flags["thinking_rewritten"] = True
-        else:
-            evidence.append({
-                "tier": 2,
-                "name": "thinkingBudget=0",
-                "fact": "200 OK,未改写",
-                "implication": "上游接受了 thinkingBudget=0(AI Studio 偶尔也接受,但如果同时出现其他 OAuth 信号则升级为 OAuth 硬证据)",
-            })
-            flags["thinking_accepted"] = True
-    elif tb0.get("status") == -1:
-        evidence.append({
-            "tier": 2,
-            "name": "thinkingBudget=0",
-            "fact": "超时",
-            "implication": "上游响应缓慢,可能 OAuth 套壳",
-        })
-        flags["thinking_timeout"] = True
+        if capability in {"supports_zero", "flash_compat"} and status == 200:
+            flags["thinking_zero_allowed"] = True
 
     # 错误路径泄露
     err = active.get("error_path_leak") or {}
@@ -386,7 +376,7 @@ def _interpret_field_sampling(v_likely: int, a_likely: int, a_conf: int, unknown
 
 
 def _decide(flags: dict[str, bool]) -> tuple[str, str]:
-    """优先级(v1.8 修正):
+    """优先级(v1.9 修正):
     1. 非 Google 套壳冒充
     2. 模型被替换(Tier 4 知识探针)
     3. OAuth + AI Studio 信号共存 → 混合上游(多池)
@@ -415,10 +405,10 @@ def _decide(flags: dict[str, bool]) -> tuple[str, str]:
         oauth_signals += 1  # Tier 1 hard
     if flags.get("group_oauth_hint"):
         oauth_signals += 1  # Tier 1 soft
-    # thinkingBudget=0 返回 200 原样接受 = OAuth 套壳硬指纹（方案 §14.3 单条即定论）
-    # Vertex 一定 400，AI Studio 也拒绝，只有 OAuth 套壳原样接受 → 独立强信号
-    if flags.get("thinking_accepted") and not flags.get("strict_400"):
-        oauth_signals += 2  # Tier 2 hard，单条即可定论 OAuth
+    # v1.9: only unexpected accepts on requires-thinking routes count here.
+    # Flash / Flash-Lite accepting thinkingBudget=0 is official behavior.
+    if flags.get("thinking_unexpected_accept"):
+        oauth_signals += 1
     # 改写为 -nothinking 别名:中转层做的,AI Studio/OAuth 都可能 → 仅辅助
     if flags.get("thinking_rewritten") and oauth_signals >= 1:
         oauth_signals += 1
@@ -426,8 +416,8 @@ def _decide(flags: dict[str, bool]) -> tuple[str, str]:
         oauth_signals += 1  # 高延迟 OAuth 网络特征（§9.4b）,需配合其它信号
 
     # --- 计算 AI Studio 信号强度 ---
-    # 注意:thinkingBudget=0 被接受**不是** AI Studio 信号(AI Studio 也拒绝),
-    # 已移到 OAuth 计分(方案 §14.3 修正,旧版在此误判为 AI Studio)
+    # 注意:Flash / Flash-Lite 接受 thinkingBudget=0 是官方行为,
+    # 不计入 AI Studio 或 OAuth 分数。
     ai_signals = 0
     if flags.get("aistudio_confirmed_field"):
         ai_signals += 2  # Tier 1 hard

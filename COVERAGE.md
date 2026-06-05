@@ -1,4 +1,4 @@
-# 方案 v1.8 识别方式覆盖度对照表
+# 方案 v1.9 识别方式覆盖度对照表
 
 ## 总览
 
@@ -267,7 +267,7 @@ def probe_latency_distribution(base, model, key, n=10):
 - ✅ 错误信息含 AI Studio URL
 - ✅ HTTP 头含 x-vertex-ai-*
 - ✅ Identity 自报 Antigravity
-- ✅ thinkingBudget=0 返回 200
+- ✅ thinkingBudget=0 模型能力感知判读(Flash 200 正常;Pro/禁关 thinking 路由异常 200 为 OAuth/改写嫌疑)
 - ✅ 知识探针答错 ≥1 题
 - ✅ 知识探针全对
 - ✅ thoughtSignature 回灌 PASS
@@ -381,4 +381,4 @@ def _check_modality_details(usage: dict) -> bool:
 
 **文档版本**: v1.1  
 **更新时间**: 2026-06-02  
-**对照方案**: Gemini中转站渠道识别方案 v1.8
+**对照方案**: Gemini中转站渠道识别方案 v1.9

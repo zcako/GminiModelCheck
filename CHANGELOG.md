@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.1.5] - 2026-06-05
+
+### 判定规则
+
+- 对齐 `Gemini 中转站渠道识别方案 v1.9`。
+- `thinkingBudget=0` 改为模型能力感知判读:
+  - 2.5 Flash / Flash-Lite 接受 0 是官方行为,不再作为 OAuth 证据。
+  - Pro / 明确不支持关闭 thinking 的路由异常 200,才作为 OAuth 或中转改写嫌疑。
+  - OAuth 结论需要结合 `X-Routing-Group`、identity、系统提示污染或 sig 回灌等独立证据。
+
+### 工具脚本
+
+- 新增共享分类器 `probes/thinking.py`。
+- `manual_probe.py`、完整审计 `probes/active.py` / `probes/verdict.py`、以及
+  `model_source_probe.py` 均复用 v1.9 规则。
+- `model_source_probe.py` 报告新增 `thinkingBudget=0` 与 `countTokens` 端点污染摘要,原始
+  `.http` 请求/响应包保留不变。
+
 ## [Unreleased] - 2026-06-04
 
 ### 文档补充

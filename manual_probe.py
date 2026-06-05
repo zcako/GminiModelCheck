@@ -15,6 +15,8 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Callable
 
+from probes.thinking import classify_thinking_budget_zero
+
 
 DEFAULT_MODEL = "gemini-3.1-pro-preview"
 DEFAULT_SIG_MODEL = "gemini-3-flash-preview"
@@ -188,32 +190,18 @@ def show_headers(headers: dict[str, str]) -> None:
         print(f"    {key}: {value}")
 
 
-def classify_thinking_budget_result(status: int, data: dict[str, Any], elapsed: float) -> dict[str, Any]:
-    model_version = str(data.get("modelVersion") or "")
-    if status == 400:
-        signal = "strict_reject"
-        note = "Vertex/AI Studio style strict rejection"
-    elif status == 200 and "nothinking" in model_version.lower():
-        signal = "rewritten_to_nothinking"
-        note = "relay rewrote request to a -nothinking alias"
-    elif status == 200:
-        signal = "oauth_accepted_as_is"
-        note = "non-Vertex strong signal; OAuth/CLI wrapper is likely"
-    elif status == 422:
-        signal = "nothinking_alias_rejected"
-        note = "relay/model rejected a nothinking alias or rewritten request"
-    elif status == -1:
-        signal = "timeout_or_network"
-        note = "timeout can be an OAuth-wrapper latency symptom"
-    else:
-        signal = f"status_{status}"
-        note = "unexpected status"
-    return {
-        "signal": signal,
-        "note": note,
-        "modelVersion": model_version or None,
-        "elapsed": round(elapsed, 3),
-    }
+def classify_thinking_budget_result(
+    model: str,
+    status: int,
+    data: dict[str, Any],
+    elapsed: float,
+) -> dict[str, Any]:
+    return classify_thinking_budget_zero(
+        requested_model=model,
+        status=status,
+        body=data,
+        elapsed=elapsed,
+    )
 
 
 def extract_text(data: dict[str, Any]) -> str:
@@ -286,10 +274,12 @@ def step2_thinking_budget_zero(cfg: Config) -> dict[str, Any]:
     status, body, headers = call(cfg, f"/v1beta/models/{cfg.model}:generateContent", payload, timeout=90)
     elapsed = time.time() - start
     data = load_json(body)
-    result = classify_thinking_budget_result(status, data, elapsed)
+    result = classify_thinking_budget_result(cfg.model, status, data, elapsed)
     print(f"  HTTP {status}  (latency {elapsed:.1f}s)")
     print(f"    modelVersion: {result.get('modelVersion')}")
     print(f"    signal: {result['signal']} - {result['note']}")
+    print(f"    capability: {result.get('capability')}")
+    print(f"    oauth_suspect: {result.get('oauth_suspect')}")
     error_message = safe_get(data, "error", "message", default="")
     if error_message:
         print(f"    error: {clip(error_message, 200)}")

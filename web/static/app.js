@@ -1,5 +1,5 @@
 const stages = [
-  ["thinking_budget_zero", "thinkingBudget=0"],
+  ["thinking_budget_zero", "thinkingBudget=0 (model-aware)"],
   ["field_sampling", "字段采样"],
   ["error_path_leak", "错误路径泄露"],
   ["cached_contents", "cachedContents"],
