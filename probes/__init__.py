@@ -2,6 +2,7 @@
 from __future__ import annotations
 import json
 import time
+import http.client
 import urllib.request
 import urllib.error
 import socket
@@ -182,9 +183,9 @@ def _do_request(
             body = ""
         hdrs = {k.lower(): v for k, v in (e.headers.items() if e.headers else [])}
         return e.code, body, hdrs
-    except (urllib.error.URLError, socket.timeout, TimeoutError) as e:
+    except (urllib.error.URLError, socket.timeout, TimeoutError, http.client.RemoteDisconnected, ConnectionResetError) as e:
         # 用 -1 表示 connect/read timeout
-        msg = str(e)
+        msg = f"{type(e).__name__}: {e}"
         return -1, json.dumps({"error": "timeout_or_network", "detail": msg}), {}
 
 

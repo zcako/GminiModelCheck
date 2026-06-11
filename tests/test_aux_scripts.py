@@ -1,4 +1,5 @@
 import importlib
+import http.client
 import os
 import sys
 import tempfile
@@ -160,6 +161,25 @@ class ModelEnumTest(unittest.TestCase):
 
         self.assertNotRegex(combined, r"(?m)^(BASE|KEY)\s*=\s*['\"]")
         self.assertNotRegex(combined, r"https?://\d+\.\d+\.\d+\.\d+")
+
+
+class HttpClientTest(unittest.TestCase):
+    def test_remote_disconnected_is_reported_as_network_failure(self):
+        import probes
+        import urllib.request
+
+        request = urllib.request.Request("https://relay.example.com/v1beta/models/m:generateContent")
+
+        with mock.patch(
+            "urllib.request.urlopen",
+            side_effect=http.client.RemoteDisconnected("Remote end closed connection without response"),
+        ):
+            status, body, headers = probes._do_request(request, timeout=1)
+
+        self.assertEqual(status, -1)
+        self.assertEqual(headers, {})
+        self.assertIn("timeout_or_network", body)
+        self.assertIn("RemoteDisconnected", body)
 
 
 if __name__ == "__main__":
